@@ -38,6 +38,8 @@
 #else
 
 #include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
 #ifndef SEEK_SET
 #define SEEK_SET 0
@@ -672,6 +674,17 @@ static void get_default_name (char *default_name, zword addr)
 
 }/* get_default_name */
 
+int run_script(char *cmd, char *new_name, char *tmp_file)
+{
+	int pid;
+	if ((pid = fork ()) == 0) {
+		char *argv[5] = { "dfrotz-db.sh", cmd, new_name, tmp_file, NULL };
+		execvp("dfrotz-db.sh", argv);
+	}
+	int status;
+	waitpid (pid, &status, 0);
+	return (WEXITSTATUS(status) == EXIT_SUCCESS);
+}
 
 /*
  * z_restore, restore [a part of] a Z-machine state from disk
@@ -688,6 +701,10 @@ void z_restore (void)
     FILE *gfp;
 
     zword success = 0;
+
+    char tmp_file[MAX_FILE_NAME + 1];
+    strcpy (tmp_file, "/tmp/frotz_save_file_XXXXXX");
+    int tmp_fd = mkstemp (tmp_file);
 
     if (zargc != 0) {
 
@@ -727,9 +744,13 @@ void z_restore (void)
 
 	strcpy (f_setup.save_name, new_name);
 
+	/* Restore save to temp file */
+
+	success = run_script ("restore", new_name, tmp_file);
+
 	/* Open game file */
 
-	if ((gfp = fopen (new_name, "rb")) == NULL)
+	if ((gfp = fdopen (tmp_fd, "rb")) == NULL)
 	    goto finished;
 
 	success = restore_quetzal (gfp, story_fp);
@@ -770,6 +791,7 @@ void z_restore (void)
 
 finished:
 
+    unlink (tmp_file);
     if (h_version <= V3)
 	branch (success);
     else
@@ -926,6 +948,10 @@ void z_save (void)
 
     zword success = 0;
 
+    char tmp_file[MAX_FILE_NAME + 1];
+    strcpy (tmp_file, "/tmp/frotz_save_file_XXXXXX");
+    int tmp_fd = mkstemp (tmp_file);
+
     if (zargc != 0) {
 
 	/* Get the file name */
@@ -965,9 +991,9 @@ void z_save (void)
 
 	strcpy (f_setup.save_name, new_name);
 
-	/* Open game file */
+	/* Open temporary game file */
 
-	if ((gfp = fopen (new_name, "wb")) == NULL)
+	if ((gfp = fdopen (tmp_fd, "wb")) == NULL)
 	    goto finished;
 
 	success = save_quetzal (gfp, story_fp);
@@ -979,13 +1005,14 @@ void z_save (void)
 	    goto finished;
 	}
 
-	/* Success */
+	/* Save and delete temp file */
 
-	success = 1;
+        success = run_script ("save", new_name, tmp_file);
     }
 
 finished:
 
+    unlink (tmp_file);
     if (h_version <= V3)
 	branch (success);
     else

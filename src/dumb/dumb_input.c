@@ -398,14 +398,6 @@ int os_read_file_name (char *file_name, const char *default_name, int flag)
   }
 
   strcpy (file_name, buf[0] ? buf : default_name);
-
-  /* Warn if overwriting a file.  */
-  if ((flag == FILE_SAVE || flag == FILE_SAVE_AUX || flag == FILE_RECORD)
-      && ((fp = fopen(file_name, "rb")) != NULL)) {
-    fclose (fp);
-    dumb_read_misc_line(buf, "Overwrite existing file? ");
-    return(tolower(buf[0]) == 'y');
-  }
   return TRUE;
 }
 
